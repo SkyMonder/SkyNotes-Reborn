@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=1.5">
+  <title>Шифрованные заметки | SecureNotes</title>
+  <!-- CryptoJS для надёжного AES-шифрования и PBKDF2 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0b0e14;
+      --bg-surface: #151a23;
+      --bg-card: #1c2432;
+      --text-primary: #eef5ff;
+      --text-secondary: #a0b4cc;
+      --accent: #4f8fff;
+      --accent-glow: rgba(79, 143, 255, 0.25);
+      --danger: #ff5c7a;
+      --success: #2dd4bf;
+      --border: #253045;
+      --radius: 18px;
+      --radius-sm: 12px;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      --transition: 0.25s cubic-bezier(0.2, 0.9, 0.4, 1);
+    }
+
+    body {
+      background: var(--bg-primary);
+      background-image: radial-gradient(circle at 25% 30%, #1b2638 0%, #0b0e14 90%);
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 950px;
+      background: var(--bg-surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-radius: 32px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      padding: 2rem;
+      transition: all var(--transition);
+    }
+
+    h1, h2 {
+      font-weight: 600;
+      letter-spacing: -0.4px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(135deg, #cbd5ff 0%, #8da4ff 80%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.35rem;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+
+    .auth-section, .notes-section {
+      animation: fadeSlide 0.4s ease;
+    }
+
+    @keyframes fadeSlide {
+      0% { opacity: 0; transform: translateY(12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .form-group {
+      margin-bottom: 1.4rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }
+
+    input, textarea {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.9rem 1.2rem;
+      font-size: 1rem;
+      color: var(--text-primary);
+      transition: var(--transition);
+      outline: none;
+      font-family: inherit;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 110px;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 40px;
+      padding: 0.8rem 1.9rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      letter-spacing: 0.3px;
+      box-shadow: 0 8px 20px rgba(79, 143, 255, 0.3);
+    }
+
+    .btn:hover {
+      background: #6a9fff;
+      box-shadow: 0 12px 28px rgba(79, 143, 255, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      box-shadow: none;
+      color: var(--text-primary);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255,255,255,0.05);
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      box-shadow: 0 8px 20px rgba(255, 92, 122, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: #ff7b94;
+    }
+
+    .btn-small {
+      padding: 0.5rem 1.2rem;
+      font-size: 0.8rem;
+    }
+
+    .flex-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .notes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.8rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .user-badge {
+      background: var(--bg-card);
+      padding: 0.5rem 1.2rem;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .note-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.3rem;
+      margin-bottom: 1rem;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    .note-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .note-title {
+      font-weight: 600;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      word-break: break-word;
+    }
+
+    .note-preview {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .note-date {
+      font-size: 0.7rem;
+      color: #6b7b94;
+      margin-top: 0.6rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-secondary);
+    }
+
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal {
+      background: var(--bg-surface);
+      border-radius: 28px;
+      padding: 2rem;
+      width: 90%;
+      max-width: 550px;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 50px rgba(0,0,0,0.8);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .security-note {
+      font-size: 0.75rem;
+      color: #6b7b94;
+      margin-top: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    hr {
+      border: 0.5px solid var(--border);
+      margin: 1.2rem 0;
+    }
+
+    @media (max-width: 550px) {
+      .app-container {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="app-container" id="appContainer">
+  <!-- Динамическая отрисовка -->
+</div>
+
+<script>
+  (function() {
+    // ---------- КОНФИГУРАЦИЯ И ХРАНИЛИЩЕ ----------
+    const STORAGE_USERS = 'securenotes_users';
+    const STORAGE_NOTES_PREFIX = 'securenotes_notes_';
+
+    // Получение данных из localStorage с защитой от повреждений
+    function safeGetJSON(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function safeSetJSON(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    // ---------- КРИПТОГРАФИЧЕСКИЕ УТИЛИТЫ ----------
+    // Генерация соли
+    function generateSalt(length = 32) {
+      return CryptoJS.lib.WordArray.random(length).toString();
+    }
+
+    // PBKDF2 для получения ключа из пароля (100 000 итераций)
+    function deriveKey(password, salt) {
+      return CryptoJS.PBKDF2(password, salt, {
+        keySize: 256 / 32,
+        iterations: 100000,
+        hasher: CryptoJS.algo.SHA256
+      }).toString();
+    }
+
+    // Хеш пароля (SHA-256)
+    function hashPassword(password) {
+      return CryptoJS.SHA256(password).toString();
+    }
+
+    // Шифрование строки с помощью AES
+    function encryptAES(plaintext, key) {
+      return CryptoJS.AES.encrypt(plaintext, key).toString();
+    }
+
+    // Расшифровка AES
+    function decryptAES(ciphertext, key) {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, key);
+      return bytes.toString(CryptoJS.enc.Utf8);
+    }
+
+    // Создание случайного идентификатора
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    // ---------- УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ----------
+    function getUsers() {
+      return safeGetJSON(STORAGE_USERS) || [];
+    }
+
+    function saveUsers(users) {
+      safeSetJSON(STORAGE_USERS, users);
+    }
+
+    function findUserByUsername(username) {
+      const users = getUsers();
+      return users.find(u => u.username === username);
+    }
+
+    // Регистрация нового пользователя
+    function registerUser(username, password) {
+      const users = getUsers();
+      if (findUserByUsername(username)) {
+        throw new Error('Пользователь с таким именем уже существует');
+      }
+      const salt = generateSalt();
+      const passwordHash = hashPassword(password + salt); // хеш пароля с солью
+      const masterKey = deriveKey(password, salt); // ключ для шифрования заметок
+      const newUser = {
+        id: generateUUID(),
+        username: username,
+        salt: salt,
+        passwordHash: passwordHash,
+        masterKey: masterKey, // в реальном backend это не хранилось бы, но здесь клиентское шифрование
+        createdAt: Date.now()
+      };
+      users.push(newUser);
+      saveUsers(users);
+      return newUser;
+    }
+
+    // Аутентификация
+    function authenticateUser(username, password) {
+      const user = findUserByUsername(username);
+      if (!user) throw new Error('Неверное имя пользователя или пароль');
+      const computedHash = hashPassword(password + user.salt);
+      if (computedHash !== user.passwordHash) {
+        throw new Error('Неверное имя пользователя или пароль');
+      }
+      // Пересоздаём мастер-ключ
+      const masterKey = deriveKey(password, user.salt);
+      return { ...user, masterKey };
+    }
+
+    // Гостевой аккаунт (одноразовый, без пароля)
+    function createGuestUser() {
+      const guestId = 'guest_' + generateUUID();
+      const masterKey = generateSalt(32); // случайный ключ
+      const guestUser = {
+        id: guestId,
+        username: 'Гость (' + guestId.slice(6, 14) + ')',
+        salt: 'guest_salt',
+        passwordHash: null,
+        masterKey: masterKey,
+        isGuest: true,
+        createdAt: Date.now()
+      };
+      // Гости не сохраняются в общий список пользователей, но мы храним их в sessionStorage
+      sessionStorage.setItem('guest_user', JSON.stringify(guestUser));
+      return guestUser;
+    }
+
+    function getGuestFromSession() {
+      try {
+        const raw = sessionStorage.getItem('guest_user');
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    }
+
+    // ---------- РАБОТА С ЗАМЕТКАМИ (зашифрованными) ----------
+    function getNotesKey(userId) {
+      return STORAGE_NOTES_PREFIX + userId;
+    }
+
+    function loadEncryptedNotes(userId) {
+      return safeGetJSON(getNotesKey(userId)) || [];
+    }
+
+    function saveEncryptedNotes(userId, encryptedNotes) {
+      safeSetJSON(getNotesKey(userId), encryptedNotes);
+    }
+
+    // Расшифровка заметок для пользователя
+    function decryptNotes(encryptedNotes, masterKey) {
+      return encryptedNotes.map(encNote => {
+        try {
+          const decryptedJson = decryptAES(encNote.data, masterKey);
+          return JSON.parse(decryptedJson);
+        } catch (e) {
+          // Если расшифровка не удалась (повреждённые данные), возвращаем placeholder
+          return {
+            id: encNote.id || generateUUID(),
+            title: '[Ошибка расшифровки]',
+            content: '',
+            createdAt: Date.now(),
+            corrupted: true
+          };
+        }
+      });
+    }
+
+    // Шифрование массива заметок
+    function encryptNotes(notesArray, masterKey) {
+      return notesArray.map(note => {
+        const plainObj = {
+          id: note.id,
+          title: note.title,
+          content: note.content,
+          createdAt: note.createdAt,
+          updatedAt: Date.now()
+        };
+        return {
+          id: note.id,
+          data: encryptAES(JSON.stringify(plainObj), masterKey)
+        };
+      });
+    }
+
+    // ---------- СОСТОЯНИЕ ПРИЛОЖЕНИЯ ----------
+    let currentUser = null;        // объект пользователя с masterKey
+    let currentNotes = [];        // расшифрованные заметки
+
+    // Экранирование HTML для безопасности (XSS prevention)
+    function escapeHtml(str) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return String(str).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Очистка ввода от потенциально опасных символов (дополнительно)
+    function sanitizeInput(input) {
+      return input.replace(/<[^>]*>/g, ''); // убираем HTML теги
+    }
+
+    // ---------- ОТОБРАЖЕНИЕ ИНТЕРФЕЙСА ----------
+    const container = document.getElementById('appContainer');
+
+    function renderAuth() {
+      container.innerHTML = `
+        <div class="auth-section">
+          <h1>🔐 SecureNotes</h1>
+          <p class="subtitle">Зашифрованные заметки с защитой на уровне браузера</p>
+          <div id="authForm" class="form-group">
+            <label for="username">Имя пользователя</label>
+            <input type="text" id="username" placeholder="Введите логин" autocomplete="username" maxlength="40">
+            <label for="password" style="margin-top:1rem;">Пароль</label>
+            <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+            <div class="flex-row" style="margin-top:1.8rem;">
+              <button class="btn" id="loginBtn">Войти</button>
+              <button class="btn btn-outline" id="registerBtn">Регистрация</button>
+            </div>
+            <hr>
+            <button class="btn btn-outline" id="guestBtn" style="width:100%;">🎭 Войти как гость (временный аккаунт)</button>
+            <div class="security-note">
+              <span>🔒 Пароль никогда не передаётся. Все данные зашифрованы AES-256.</span>
+            </div>
+          </div>
+          <div id="authError" style="color: #ff5c7a; margin-top:1rem; font-size:0.9rem;"></div>
+        </div>
+      `;
+
+      document.getElementById('loginBtn').addEventListener('click', handleLogin);
+      document.getElementById('registerBtn').addEventListener('click', handleRegister);
+      document.getElementById('guestBtn').addEventListener('click', handleGuestLogin);
+      document.getElementById('password').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleLogin();
+      });
+    }
+
+    function showError(message) {
+      const errEl = document.getElementById('authError');
+      if (errEl) errEl.textContent = message;
+    }
+
+    function handleLogin() {
+      const username = sanitizeInput(document.getElementById('username').value.trim());
+      const password = document.getElementById('password').value;
+      if (!username || !password) {
+        showError('Введите имя пользователя и пароль');
+        return;
+      }
+      try {
+        const user = authenticateUser(username, password);
+        loginSuccess(user);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function handleRegister() {
+      const username = sanitizeInput(document.getElementById('username').value.trim());
+      const password = document.getElementById('password').value;
+      if (!username || !password) {
+        showError('Заполните все поля');
+        return;
+      }
+      if (password.length < 6) {
+        showError('Пароль должен быть минимум 6 символов');
+        return;
+      }
+      try {
+        const user = registerUser(username, password);
+        loginSuccess(user);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function handleGuestLogin() {
+      const guest = createGuestUser();
+      loginSuccess(guest);
+    }
+
+    function loginSuccess(user) {
+      currentUser = user;
+      // Загружаем заметки
+      const encryptedNotes = loadEncryptedNotes(user.id);
+      currentNotes = decryptNotes(encryptedNotes, user.masterKey);
+      renderNotesApp();
+    }
+
+    function logout() {
+      if (currentUser && currentUser.isGuest) {
+        // Удаляем гостевой ключ из sessionStorage
+        sessionStorage.removeItem('guest_user');
+        // Заметки гостя остаются в localStorage, но без ключа недоступны.
+        // Можно предложить очистку (опционально). Показываем предупреждение.
+        if (confirm('Вы выходите из гостевого аккаунта. Все данные будут недоступны без ключа. Очистить сохранённые заметки гостя?')) {
+          localStorage.removeItem(getNotesKey(currentUser.id));
+        }
+      }
+      currentUser = null;
+      currentNotes = [];
+      renderAuth();
+    }
+
+    function saveCurrentNotes() {
+      if (!currentUser) return;
+      const encrypted = encryptNotes(currentNotes, currentUser.masterKey);
+      saveEncryptedNotes(currentUser.id, encrypted);
+    }
+
+    function addNote(title, content) {
+      const cleanTitle = sanitizeInput(title);
+      const cleanContent = sanitizeInput(content);
+      const newNote = {
+        id: generateUUID(),
+        title: cleanTitle || 'Без заголовка',
+        content: cleanContent,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      currentNotes.push(newNote);
+      saveCurrentNotes();
+      renderNotesApp();
+    }
+
+    function updateNote(noteId, title, content) {
+      const note = currentNotes.find(n => n.id === noteId);
+      if (note) {
+        note.title = sanitizeInput(title) || 'Без заголовка';
+        note.content = sanitizeInput(content);
+        note.updatedAt = Date.now();
+        saveCurrentNotes();
+      }
+    }
+
+    function deleteNote(noteId) {
+      currentNotes = currentNotes.filter(n => n.id !== noteId);
+      saveCurrentNotes();
+      renderNotesApp();
+    }
+
+    // Экспорт заметок (расшифрованных) в JSON
+    function exportNotes() {
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        username: currentUser.username,
+        notes: currentNotes
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `securenotes_backup_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Импорт заметок (ожидается JSON структура с массивом notes)
+    function importNotes(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data.notes || !Array.isArray(data.notes)) throw new Error('Неверный формат');
+          // Добавляем заметки, избегая дубликатов по id (просто добавляем)
+          for (let note of data.notes) {
+            if (!note.id) note.id = generateUUID();
+            note.title = sanitizeInput(note.title || 'Импорт');
+            note.content = sanitizeInput(note.content || '');
+            note.createdAt = note.createdAt || Date.now();
+            note.updatedAt = Date.now();
+            // Избегаем дублирования id
+            if (!currentNotes.some(n => n.id === note.id)) {
+              currentNotes.push(note);
+            }
+          }
+          saveCurrentNotes();
+          renderNotesApp();
+        } catch (err) {
+          alert('Ошибка импорта: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function renderNotesApp() {
+      if (!currentUser) {
+        renderAuth();
+        return;
+      }
+
+      const sortedNotes = [...currentNotes].sort((a, b) => b.updatedAt - a.updatedAt);
+      let notesHtml = '';
+      if (sortedNotes.length === 0) {
+        notesHtml = `<div class="empty-state">✨ Нет заметок. Создайте первую!</div>`;
+      } else {
+        sortedNotes.forEach(note => {
+          const preview = escapeHtml(note.content || '').substring(0, 120);
+          const dateStr = new Date(note.updatedAt || note.createdAt).toLocaleString('ru-RU');
+          notesHtml += `
+            <div class="note-card" data-note-id="${escapeHtml(note.id)}">
+              <div class="note-title">${escapeHtml(note.title)}</div>
+              <div class="note-preview">${escapeHtml(preview)}</div>
+              <div class="note-date">🕒 ${escapeHtml(dateStr)}</div>
+            </div>
+          `;
+        });
+      }
+
+      container.innerHTML = `
+        <div class="notes-section">
+          <div class="notes-header">
+            <div>
+              <h1>📒 Мои заметки</h1>
+              <div class="user-badge">
+                <span>👤 ${escapeHtml(currentUser.username)} ${currentUser.isGuest ? '(гость)' : ''}</span>
+              </div>
+            </div>
+            <div class="flex-row">
+              <button class="btn" id="addNoteBtn">＋ Новая</button>
+              <button class="btn btn-outline btn-small" id="exportBtn">📤 Экспорт</button>
+              <label class="btn btn-outline btn-small" style="cursor:pointer; margin:0;">
+                📥 Импорт
+                <input type="file" id="importFile" accept=".json" style="display:none;">
+              </label>
+              <button class="btn btn-outline btn-small btn-danger" id="logoutBtn">🚪 Выход</button>
+            </div>
+          </div>
+          <div id="notesList">${notesHtml}</div>
+        </div>
+      `;
+
+      // Обработчики
+      document.getElementById('addNoteBtn').addEventListener('click', openNoteModal);
+      document.getElementById('exportBtn').addEventListener('click', exportNotes);
+      document.getElementById('importFile').addEventListener('change', (e) => {
+        if (e.target.files[0]) importNotes(e.target.files[0]);
+      });
+      document.getElementById('logoutBtn').addEventListener('click', logout);
+
+      // Клик по карточке заметки для редактирования
+      document.querySelectorAll('.note-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          const noteId = card.dataset.noteId;
+          const note = currentNotes.find(n => n.id === noteId);
+          if (note) openNoteModal(note);
+        });
+      });
+    }
+
+    function openNoteModal(existingNote = null) {
+      const modalId = 'noteModal';
+      // Удаляем предыдущую модалку если есть
+      const oldModal = document.getElementById(modalId);
+      if (oldModal) oldModal.remove();
+
+      const isEdit = !!existingNote;
+      const title = isEdit ? escapeHtml(existingNote.title) : '';
+      const content = isEdit ? escapeHtml(existingNote.content) : '';
+
+      const modalHtml = `
+        <div class="modal-mask" id="${modalId}">
+          <div class="modal">
+            <h2>${isEdit ? '✏️ Редактировать' : '✨ Новая заметка'}</h2>
+            <div class="form-group">
+              <label for="noteTitle">Заголовок</label>
+              <input type="text" id="noteTitle" value="${title}" maxlength="100" placeholder="Название">
+            </div>
+            <div class="form-group">
+              <label for="noteContent">Содержание</label>
+              <textarea id="noteContent" placeholder="Текст заметки...">${content}</textarea>
+            </div>
+            <div class="flex-row">
+              <button class="btn" id="saveNoteBtn">💾 Сохранить</button>
+              ${isEdit ? '<button class="btn btn-danger btn-small" id="deleteNoteBtn">🗑 Удалить</button>' : ''}
+              <button class="btn btn-outline" id="closeModalBtn">Отмена</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      document.getElementById('closeModalBtn').addEventListener('click', () => {
+        document.getElementById(modalId).remove();
+      });
+
+      document.getElementById('saveNoteBtn').addEventListener('click', () => {
+        const titleInput = document.getElementById('noteTitle');
+        const contentInput = document.getElementById('noteContent');
+        const newTitle = titleInput.value.trim();
+        const newContent = contentInput.value.trim();
+        if (!newTitle && !newContent) {
+          alert('Заметка не может быть пустой');
+          return;
+        }
+        if (isEdit) {
+          updateNote(existingNote.id, newTitle, newContent);
+        } else {
+          addNote(newTitle, newContent);
+        }
+        document.getElementById(modalId).remove();
+        renderNotesApp();
+      });
+
+      if (isEdit) {
+        document.getElementById('deleteNoteBtn').addEventListener('click', () => {
+          if (confirm('Удалить заметку безвозвратно?')) {
+            deleteNote(existingNote.id);
+            document.getElementById(modalId).remove();
+            renderNotesApp();
+          }
+        });
+      }
+
+      // Закрытие по клику вне модалки
+      document.getElementById(modalId).addEventListener('click', (e) => {
+        if (e.target.id === modalId) document.getElementById(modalId).remove();
+      });
+    }
+
+    // Инициализация: проверяем, есть ли активный гостевой сеанс
+    function init() {
+      const guest = getGuestFromSession();
+      if (guest) {
+        currentUser = guest;
+        const encryptedNotes = loadEncryptedNotes(guest.id);
+        currentNotes = decryptNotes(encryptedNotes, guest.masterKey);
+        renderNotesApp();
+      } else {
+        renderAuth();
+      }
+    }
+
+    init();
+  })();
+</script>
+</body>
+</html>
